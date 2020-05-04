@@ -103,8 +103,7 @@ def fval(zsim, hull, grid_xyz, xsiz, ysiz, zsiz, SG, price, cf,
 
 
 def sample_ddh3d(simfl, rockfl, outfl1, outfl2, nreals, nddhout,
-                 nx, ny, nz, xmin, ymin, zmin, xsize, ysize, zsize, dh_data,
-                 sample_space, fan=0, nfan_ddh=None, fan_dip_inc=None,):
+                 grid, dh_data, sample_space):
     '''Function to sample 3D simulated realizations by defining drillhole
     collars, azimuths and dips. Drillhole fan option will drill multiple fanned
     holes from a single collar location simulating UG drilling. Samples are
@@ -115,6 +114,8 @@ def sample_ddh3d(simfl, rockfl, outfl1, outfl2, nreals, nddhout,
     dhdata format: [x,y,z,azm,dip,length]
     Code Author: Ben Harding
     Date: February 6 2020'''
+
+    nx, xmin, xsize, ny, ymin, ysize, nz, zmin, zsize = grid
 
     grade = gs.DataFile(simfl).data.values
     grade = grade.flatten()
@@ -131,77 +132,38 @@ def sample_ddh3d(simfl, rockfl, outfl1, outfl2, nreals, nddhout,
     length = dhdata[:, 5]
 
     # get sample coordinates
-    if fan == 0:
-        print('Sampling independent drillholes:')
-        nddh = col.shape[0]
-        holeid = np.arange(1, nddh+1)
-        coords = []
 
-        for ddh in zip(col, azm, dip, length, holeid):
-            col_tmp = ddh[0]
-            azm_tmp = ddh[1]
-            dip_tmp = ddh[2]
-            len_tmp = ddh[3]
-            holeid_tmp = ddh[4]
-            azm_rad = azm_tmp * np.pi/180
-            dip_rad = dip_tmp * np.pi/180
-            samp_tmp = np.arange(sample_space/2, len_tmp, sample_space)
-            coords_tmp = np.zeros((len(samp_tmp), 5))
+    nddh = col.shape[0]
+    holeid = np.arange(1, nddh+1)
+    coords = []
 
-            for i, s in enumerate(samp_tmp):
-                l_plan = np.cos(dip_rad) * s
-                dx = np.sin(azm_rad) * l_plan
-                dy = np.cos(azm_rad) * l_plan
-                dz = np.sin(dip_rad) * s
-                coords_tmp[i, 0] = holeid_tmp
-                coords_tmp[i, 1] = col_tmp[0] + dx
-                coords_tmp[i, 2] = col_tmp[1] + dy
-                coords_tmp[i, 3] = col_tmp[2] - dz
-                coords_tmp[i, 4] = s
+    print('Generating sample coordinates')
+    print('\n')
 
-            coords.append(coords_tmp)
-        coords = np.vstack(coords)
+    for ddh in zip(col, azm, dip, length, holeid):
+        col_tmp = ddh[0]
+        azm_tmp = ddh[1]
+        dip_tmp = ddh[2]
+        len_tmp = ddh[3]
+        holeid_tmp = ddh[4]
+        azm_rad = azm_tmp * np.pi/180
+        dip_rad = dip_tmp * np.pi/180
+        samp_tmp = np.arange(sample_space/2, len_tmp, sample_space)
+        coords_tmp = np.zeros((len(samp_tmp), 5))
 
-    # get drillhole fan coordinates
-    if fan == 1:
-        print('Sampling fanned drillholes:')
-        coords = []
-        nfan = col.shape[0]
-        nddh = nfan * nfan_ddh
-        holeid = np.arange(1, nddh+1)
-        fan_col = np.repeat(col, nfan_ddh, axis=0)
-        fan_azm = np.repeat(azm, nfan_ddh, axis=0)
-        fan_len = np.repeat(length, nfan_ddh, axis=0)
-        dips = np.cumsum(np.repeat(fan_dip_inc, nfan_ddh-1, axis=0))
-        dips = np.insert(dips, 0, 0)
-        dips = np.tile(dips, nfan)
-        fan_dip = np.repeat(dip, nfan_ddh, axis=0)
-        fan_dip = fan_dip - dips
+        for i, s in enumerate(samp_tmp):
+            l_plan = np.cos(dip_rad) * s
+            dx = np.sin(azm_rad) * l_plan
+            dy = np.cos(azm_rad) * l_plan
+            dz = np.sin(dip_rad) * s
+            coords_tmp[i, 0] = holeid_tmp
+            coords_tmp[i, 1] = col_tmp[0] + dx
+            coords_tmp[i, 2] = col_tmp[1] + dy
+            coords_tmp[i, 3] = col_tmp[2] - dz
+            coords_tmp[i, 4] = s
 
-        for ddh in zip(fan_col, fan_azm, fan_dip, fan_len, holeid):
-            col_tmp = ddh[0]
-            azm_tmp = ddh[1]
-            dip_tmp = ddh[2]
-            len_tmp = ddh[3]
-            holeid_tmp = ddh[4]
-            azm_rad = azm_tmp * np.pi/180
-            dip_rad = dip_tmp * np.pi/180
-            samp_tmp = np.arange(sample_space/2, len_tmp, sample_space)
-            coords_tmp = np.zeros((len(samp_tmp), 5))
-
-            for i, s in enumerate(samp_tmp):
-                l_plan = np.cos(dip_rad) * s
-                dx = np.sin(azm_rad) * l_plan
-                dy = np.cos(azm_rad) * l_plan
-                dz = np.sin(dip_rad) * s
-                coords_tmp[i, 0] = holeid_tmp
-                coords_tmp[i, 1] = col_tmp[0] + dx
-                coords_tmp[i, 2] = col_tmp[1] + dy
-                coords_tmp[i, 3] = col_tmp[2] - dz
-                coords_tmp[i, 4] = s
-
-            coords.append(coords_tmp)
-        coords = np.vstack(coords)
+        coords.append(coords_tmp)
+    coords = np.vstack(coords)
 
     # get 3D model index of dh coordinates
     x = coords[:, 1]
@@ -215,7 +177,9 @@ def sample_ddh3d(simfl, rockfl, outfl1, outfl2, nreals, nddhout,
     ix = np.where((ix == 0) & (x == xmin - (xsize / 2.0)), 1, ix)
     iy = np.where((iy == 0) & (y == ymin - (ysize / 2.0)), 1, iy)
     iz = np.where((iz == 0) & (z == zmin - (zsize / 2.0)), 1, iz)
-    ix, iy, iz = ix - 1, iy - 1, iz - 1
+    ix = ix - 1
+    iy = iy - 1
+    iz = iz - 1
 
     # get the 1D model index from 3D model index
     idx = ix + iy * nx + iz * nx * ny
@@ -227,7 +191,9 @@ def sample_ddh3d(simfl, rockfl, outfl1, outfl2, nreals, nddhout,
     out_grid = np.argwhere(np.isnan(idx) != False)  # indexes outside grid
     idx = np.delete(idx, out_grid).astype(int)  # remove indexes
     coords = np.delete(coords, out_grid, axis=0)  # remove coords
+
     print(f'{len(out_grid)} samples outside the grid')
+    print('\n')
 
     # sample the gridded model data
     samp_gr = np.zeros((len(coords), nreals))
@@ -248,7 +214,9 @@ def sample_ddh3d(simfl, rockfl, outfl1, outfl2, nreals, nddhout,
     samples_gr = pd.DataFrame(out_gr, columns=cols)
     samples_rk = pd.DataFrame(out_rk, columns=cols)
     nsamp = len(samples_gr)
+
     print(f'{nsamp} samples generated from {nddh} holes')
+    print('\n')
 
     ndata = np.array([nsamp, nddh])
     np.savetxt(nddhout, ndata, fmt='%i')
@@ -257,6 +225,7 @@ def sample_ddh3d(simfl, rockfl, outfl1, outfl2, nreals, nddhout,
     gr_gslib = gs.DataFile(data=samples_gr)
     rk_gslib = gs.DataFile(data=samples_rk)
     gs.write_gslib_f(gr_gslib, outfl1)
+
     if rockfl is not None:
         gs.write_gslib_f(rk_gslib, outfl2)
 
@@ -652,8 +621,8 @@ def gen_directories(dirlist, nreals_true, nphase):
                     os.makedirs(dirs + f't{t+1}/phase{j+1}')
 
 
-def gen_sample_args(true_idx, phase_idx, nx, ny, nz, xmin, ymin, zmin, xsize, ysize, zsize,
-                    sample_space, fan, nfan_ddh, fan_dip_inc, refdir, dhdir):
+def gen_sample_args(true_idx, phase_idx, grid, sample_space,
+                    refdir, dhdir):
     '''Generate arguments for sample_ddh3d'''
 
     sim = refdir + f'real{true_idx}.gsb'
@@ -664,8 +633,7 @@ def gen_sample_args(true_idx, phase_idx, nx, ny, nz, xmin, ymin, zmin, xsize, ys
     nddhout = f'ndata_p{phase_idx}.out'
 
     sample_args = tuple((sim, rock, outfl1, outfl2, 1, nddhout,
-                         nx, ny, nz, xmin, ymin, zmin, xsize, ysize, zsize,
-                         ddh, sample_space, fan, nfan_ddh, fan_dip_inc))
+                         grid, ddh, sample_space))
 
     return sample_args
 
@@ -845,8 +813,8 @@ def gen_de_args(true_idx, phase_idx, nreals, vert_bounds, voutfl, rot,
 
 def gen_job_list(nreals_true, nreals, nphase, nstope, seed, dirlist,
                  fval_pars, min_width, max_width, rot, clip_bounds,
-                 vert_bounds, true_data, de_pars, grid1, grid2, grid3,
-                 varg1, varg2):
+                 vert_bounds, true_data, de_pars, len_comp, grid1,
+                 grid2, grid3, varg1, varg2):
     '''Generate job list for parallel processing of VOI workflow'''
 
     # generate directories
@@ -913,10 +881,11 @@ def gen_job_list(nreals_true, nreals, nphase, nstope, seed, dirlist,
         for j in range(nphase):
 
             # resample params
-            sample_args = gen_sample_args(t+1, j+1, griddef1.nx, griddef1.ny, griddef1.nz,
-                                          griddef1.xmn, griddef1.ymn, griddef1.zmn,
-                                          griddef1.xsiz, griddef1.ysiz, griddef1.zsiz,
-                                          3, 1, 8, 5, refdir, dhdir)
+            grid = [griddef1.nx, griddef1.xmn, griddef1.xsiz,
+                    griddef1.ny, griddef1.ymn, griddef1.ysiz,
+                    griddef1.nz, griddef1.zmn, griddef1.zsiz]
+            sample_args = gen_sample_args(
+                t+1, j+1, grid, len_comp, refdir, dhdir)
 
             # decluster params
             with open(pardir + 'declus_nn2.par', 'r') as f:

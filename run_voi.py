@@ -64,8 +64,8 @@ dirlist = [refdir, dhdir, simdir1, chksim, gsdir, simdir2, stopedir,
 # generate job list for parallel processing
 job0, job1, job2 = voi.gen_job_list(nreals_true, nreals, nphase, nstope, seed, dirlist, fval_pars,
                                     min_width, max_width, rot, clip_bounds, vert_bounds, true_data,
-                                    de_pars, grid1='grid1.grd', grid2='grid2.grd', grid3='grid3.grd',
-                                    varg1='varlg.var', varg2='varhg.var')
+                                    de_pars, len_comp, grid1='grid1.grd', grid2='grid2.grd',
+                                    grid3='grid3.grd', varg1='varlg.var', varg2='varhg.var')
 
 # generate reference models
 voi.voi_reference(job0, job1, nprocess)
