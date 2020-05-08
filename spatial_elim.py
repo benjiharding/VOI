@@ -14,7 +14,8 @@ from scipy import interpolate
 
 def spatial_elim(datafl, sample_len, seed, grid, dhs_option, dhs_pars,
                  dhs_search, dhs_search_ang, ztol, wcent=0.01, wrand=0.001,
-                 wrem=0.5, wstd=0.5, dhs_clip=0, group=0, header=0, delim=None,
+                 wrem=0.5, wstd=0.5, wprev=0.01, dhs_clip=0, group=0, group_tol=0.10,
+                 group_lvls=0, treat_as_cent=0, header=0, delim=None, outfl_col=None,
                  outfl_dh=None, outfl_dhs=None, outfl_avgdhs=None, outdir=None):
     '''
     datafl: file drillhole collars in format [x,y,z,azm,dip,length]
@@ -54,8 +55,8 @@ def spatial_elim(datafl, sample_len, seed, grid, dhs_option, dhs_pars,
 
     # generate sample locations from dh data
 
-    dh = syn_samples(datafl, sample_len, group=group,
-                     header=header, delim=delim)
+    dh, col = syn_samples(datafl, sample_len, group=group, group_tol=group_tol,
+                          group_lvls=group_lvls, header=header, delim=delim)
 
     # set id cols based on group/no group
 
@@ -93,10 +94,21 @@ def spatial_elim(datafl, sample_len, seed, grid, dhs_option, dhs_pars,
 
     for i, idx in enumerate(dhid):
 
-        dhxyz = xyz[dh[:, idcol] == idx]
-        centxyz = cent.repeat(len(dhxyz)).reshape(dhxyz.shape, order='F')
-        dmat = cdist(dhxyz, centxyz)
-        dhdcent[i] = np.mean(dmat)
+        if treat_as_cent == 0:
+
+            dhxyz = xyz[dh[:, idcol] == idx]
+            centxyz = cent.repeat(len(dhxyz)).reshape(dhxyz.shape, order='F')
+            dmat = cdist(dhxyz, centxyz)
+            dhdcent[i] = np.mean(dmat)
+
+        else:
+
+            dhxyz = np.mean(xyz[dh[:, idcol] == idx], axis=0)
+            dx = dhxyz[0] - xcent
+            dy = dhxyz[1] - ycent
+            dz = dhxyz[2] - zcent
+            dist = np.sqrt(dx**2 + dy**2 + dz**2)
+            dhdcent[i] = dist
 
     # calc avg. dist. between all pairs of dhs or groups
 
@@ -105,19 +117,34 @@ def spatial_elim(datafl, sample_len, seed, grid, dhs_option, dhs_pars,
 
     for i, j in combo:
 
-        idx1 = dhid[i]
-        idx2 = dhid[j]
-        dh1 = xyz[dh[:, idcol] == idx1]
-        dh2 = xyz[dh[:, idcol] == idx2]
-        dmat = cdist(dh1, dh2)
-        dhdists[i, j] = np.mean(dmat)
-        dhdists[j, i] = dhdists[i, j]
+        if treat_as_cent == 0:
+
+            idx1 = dhid[i]
+            idx2 = dhid[j]
+            dh1 = xyz[dh[:, idcol] == idx1]
+            dh2 = xyz[dh[:, idcol] == idx2]
+            dmat = cdist(dh1, dh2)
+            dhdists[i, j] = np.mean(dmat)
+            dhdists[j, i] = dhdists[i, j]
+
+        else:
+
+            idx1 = dhid[i]
+            idx2 = dhid[j]
+            dh1 = np.mean(xyz[dh[:, idcol] == idx1], axis=0)
+            dh2 = np.mean(xyz[dh[:, idcol] == idx2], axis=0)
+            dx = dh1[0] - dh2[0]
+            dy = dh1[1] - dh2[1]
+            dz = dh1[2] - dh2[2]
+            dist = np.sqrt(dx**2 + dy**2 + dz**2)
+            dhdists[i, j] = dist
+            dhdists[j, i] = dhdists[i, j]
 
     # loop over dhs or groups evaluating remaining 'goodness'
 
     dec_idx = []
 
-    for _ in dhidx:
+    for iloop in dhidx:
 
         ndh_rem = len(dhidx)
         good = np.zeros(ndh_rem)
@@ -142,7 +169,15 @@ def spatial_elim(datafl, sample_len, seed, grid, dhs_option, dhs_pars,
                 dd = 0
                 std = 0
 
-            good[i] = wcent * dc + wrand * rn + wrem * dd - wstd * std
+            if iloop > 0:
+                prev_idx = dec_idx[iloop-1]
+                dp = dhdists[prev_idx, idx]
+
+            else:
+                dp = 0
+
+            good[i] = (wcent*dc) + (wrand*rn) + \
+                (wrem*dd) + (wprev*dp) - (wstd*std)
             best = np.argmax(good)
 
         dec_idx.append(dhidx[best])
@@ -221,6 +256,9 @@ def spatial_elim(datafl, sample_len, seed, grid, dhs_option, dhs_pars,
         dh_rem = dh[dh[:, idcol] != dec_ids[ii]]
         dh = dh_rem
 
+        col_rem = col[col[:, 0] != dec_ids[ii]]
+        col = col_rem
+
         if outfl_dh is not None:
 
             if group == 0:
@@ -229,6 +267,11 @@ def spatial_elim(datafl, sample_len, seed, grid, dhs_option, dhs_pars,
             else:
                 np.savetxt(outdir + f'{outfl_dh}_{ii+1}.out', dh_rem,
                            fmt='%i %i %.2f %.2f %.2f %.2f')
+
+        if outfl_col is not None:
+
+            np.savetxt(outdir + f'{outfl_col}_{ii+1}.out', col_rem[:, 1:],
+                       fmt='%.2f %.2f %.2f %.2f %.2f %.2f')
 
         # calculate data spacing for each remaining group
         # sort data by dhid and z level first
@@ -286,7 +329,7 @@ def spatial_elim(datafl, sample_len, seed, grid, dhs_option, dhs_pars,
             tmp_dhs = np.zeros(len(dhs_pars))
             dhs = np.zeros(nxyz)
 
-            for idx in range(nxyz):
+            for idx in range(nxyz):  # could loop over nz and query entire level
 
                 loc_x = grid_xyz[idx, 0]
                 loc_y = grid_xyz[idx, 1]
@@ -398,7 +441,8 @@ def spatial_elim(datafl, sample_len, seed, grid, dhs_option, dhs_pars,
 # Helper functions
 #
 
-def syn_samples(dh_data, sample_len, group=0, header=0, delim=None):
+def syn_samples(dh_data, sample_len, group=0, group_tol=0.10, group_lvls=0,
+                header=0, delim=None):
     '''Generate synthetic drillhole samples from collar data and sample length
 
     dhdata format: [x,y,z,azm,dip,length]
@@ -431,6 +475,11 @@ def syn_samples(dh_data, sample_len, group=0, header=0, delim=None):
         print('Not considering drillhole groups')
         print('\n')
 
+        collar_groups = np.hstack(
+            (np.array(holeid).reshape(-1, 1), dhdata))
+        np.savetxt('collar_groups.out', collar_groups,
+                   fmt='%i %.2f %.2f %.2f %.2f %.2f %.2f')
+
         for ddh in zip(col, azm, dip, length, holeid):
             col_tmp = ddh[0]
             azm_tmp = ddh[1]
@@ -458,20 +507,50 @@ def syn_samples(dh_data, sample_len, group=0, header=0, delim=None):
 
     else:
 
-        # get group ids for shared collars
-        groupid = [group]
-        for i, row in enumerate(col[1:]):
-            i += 1
-            if np.all(row == col[i-1, :]):
-                groupid.append(groupid[i-1])
-            else:
-                groupid.append(groupid[i-1]+1)
+        if group_lvls == 0:
 
-        collar_groups = np.hstack((np.array(groupid).reshape(-1, 1), col))
-        _, idx = np.unique(collar_groups[:, 0], return_index=True)
-        collar_groups = collar_groups[idx]
-        np.savetxt('collar_groups.out', collar_groups,
-                   fmt='%i %.2f %.2f %.2f')
+            # get group ids for shared collars
+            groupid = [group]
+            for i, row in enumerate(col[1:]):
+
+                i += 1
+
+                if np.allclose(row, col[i-1, :], atol=group_tol):
+                    groupid.append(groupid[i-1])
+
+                else:
+                    groupid.append(groupid[i-1]+1)
+
+            collar_groups = np.hstack(
+                (np.array(groupid).reshape(-1, 1), dhdata))
+            np.savetxt('collar_groups.out', collar_groups,
+                       fmt='%i %.2f %.2f %.2f %.2f %.2f %.2f')
+
+        else:  # group considering levels
+
+            dhdata = dhdata[dhdata[:, 0].argsort()]  # sort x
+            dhdata = dhdata[dhdata[:, 1].argsort()]  # sort y
+            col = dhdata[:, 0:3]
+            azm = dhdata[:, 3]
+            dip = dhdata[:, 4]
+            length = dhdata[:, 5]
+
+            groupid = [group]
+
+            for i, row in enumerate(col[1:]):  # skip the first row
+
+                i += 1
+
+                if np.allclose(row[0:2], col[i-1, 0:2], atol=group_tol):
+                    groupid.append(groupid[i-1])
+
+                else:
+                    groupid.append(groupid[i-1]+1)
+
+            collar_groups = np.hstack(
+                (np.array(groupid).reshape(-1, 1), dhdata))
+            np.savetxt('collar_groups.out', collar_groups,
+                       fmt='%i %.2f %.2f %.2f %.2f %.2f %.2f')
 
         print(f'Considering {len(np.unique(groupid))} drillhole groups')
         print('\n')
@@ -503,7 +582,7 @@ def syn_samples(dh_data, sample_len, group=0, header=0, delim=None):
             coords.append(coords_tmp)
         coords = np.vstack(coords)
 
-    return coords
+    return coords, collar_groups
 
 
 def calc_grid_xyz(grid, return_idx=0):

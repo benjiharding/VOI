@@ -627,7 +627,7 @@ def gen_sample_args(true_idx, phase_idx, grid, sample_space,
 
     sim = refdir + f'real{true_idx}.gsb'
     rock = None
-    ddh = f'p{phase_idx}_all.out'
+    ddh = f'collars_{phase_idx}.out'
     outfl1 = dhdir + f't{true_idx}/ddh_au_p{phase_idx}_all.out'
     outfl2 = None
     nddhout = f'ndata_p{phase_idx}.out'
