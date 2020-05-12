@@ -105,12 +105,11 @@ def fval(zsim, hull, grid_xyz, xsiz, ysiz, zsiz, SG, price, cf,
 def sample_ddh3d(simfl, rockfl, outfl1, outfl2, nreals, nddhout,
                  grid, dh_data, sample_space):
     '''Function to sample 3D simulated realizations by defining drillhole
-    collars, azimuths and dips. Drillhole fan option will drill multiple fanned
-    holes from a single collar location simulating UG drilling. Samples are
-    returned as the x,y,z midpoint of the defined sample interval. If rock type
-    file is defined, function returns two data frames - one with grades and the
-    second with rock types. Otherwise dataframe of grades is returned. Positive dip
-    is down, ie vertical holes have a dip of 90.
+    collars, azimuths and dips. Samples are returned as the x,y,z midpoint 
+    of the defined sample interval. If rock type ile is defined, 
+    function returns two data frames - one with grades and the
+    second with rock types. Otherwise dataframe of grades is returned. 
+    Positive dip is down: vertical holes have a dip of 90.
     dhdata format: [x,y,z,azm,dip,length]
     Code Author: Ben Harding
     Date: February 6 2020'''
