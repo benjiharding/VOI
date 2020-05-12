@@ -670,7 +670,7 @@ def dstable(search, len_comp, ntest, noff):
 
     # return the function for interp
     dsf = interpolate.interp1d(
-        ndf, lds, bounds_error=False, fill_value=(lds.max()+1, lds.max()+1))
+        ndf, lds, bounds_error=False, fill_value='extrapolate')
 
     return dsf, ndf, lds
 
@@ -678,12 +678,17 @@ def dstable(search, len_comp, ntest, noff):
 def rotmat(ang1, ang2, ang3, anis1, anis2):
     '''After GSLIB subroutine 'setrot' by CV Deutsch 1992'''
 
+    pi = np.pi
     epsillon = 1e-10
     R = np.eye(3)
 
-    alpha = ang1 * np.pi / 180
-    beta = ang2 * np.pi / 180
-    theta = ang3 * np.pi / 180
+    if (ang1 > 0) & (ang1 < 270):
+        alpha = (90 - ang1) * pi / 180
+    else:
+        alpha = (450 - ang1) * pi / 180
+
+    beta = -1 * ang2 * pi / 180
+    theta = ang3 * pi / 180
 
     sina = np.sin(alpha)
     sinb = np.sin(beta)
@@ -695,17 +700,15 @@ def rotmat(ang1, ang2, ang3, anis1, anis2):
     afac1 = 1 / max(anis1, epsillon)
     afac2 = 1 / max(anis2, epsillon)
 
-    # from Geostats Lessons
-
-    R[0, 0] = afac1 * (cosa*cost + sina*sinb*sint)
-    R[1, 0] = afac1 * (sina*cosb)
-    R[2, 0] = afac1 * (cosa*sint - sina*sinb*cost)
-    R[0, 1] = -sina*cost + cosa*sinb*sint
-    R[1, 1] = cosa*cosb
-    R[2, 1] = -sina*sint - cosa*sinb*cost
-    R[0, 2] = afac2 * (-cosb*sint)
-    R[1, 2] = afac2 * (sinb)
-    R[2, 2] = afac2 * (cosb*cost)
+    R[0, 0] = cosb * cosa
+    R[1, 0] = cosb * sina
+    R[2, 0] = -sinb
+    R[0, 1] = afac1*(-cost*sina + sint*sinb*cosa)
+    R[1, 1] = afac1*(cost*cosa + sint*sinb*sina)
+    R[2, 1] = afac1*(sint * cosb)
+    R[0, 2] = afac2*(sint*sina + cost*sinb*cosa)
+    R[1, 2] = afac2*(-sint*cosa + cost*sinb*sina)
+    R[2, 2] = afac2*(cost * cosb)
 
     return R
 
